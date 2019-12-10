@@ -3,6 +3,7 @@ using Abp.Zero.EntityFrameworkCore;
 using LinXiDecorate.Authorization.Roles;
 using LinXiDecorate.Authorization.Users;
 using LinXiDecorate.MultiTenancy;
+using LinXiDecorate.Persons;
 
 namespace LinXiDecorate.EntityFrameworkCore
 {
@@ -14,5 +15,7 @@ namespace LinXiDecorate.EntityFrameworkCore
             : base(options)
         {
         }
+
+        public DbSet<Person> People { get; set; }
     }
 }

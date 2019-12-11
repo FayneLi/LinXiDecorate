@@ -69,6 +69,72 @@ namespace LinXiDecorate.Controllers
             };
         }
 
+        /// <summary>
+        /// 集成微信小程序登录
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        [HttpPost]
+        public async Task<ExternalAuthenticateResultModel> WeChatAuthenticate([FromBody] ExternalAuthenticateModel model)
+        {
+            var externalUser = await GetExternalUserInfo(model);
+            //Logger.Info($"用户模型:{Newtonsoft.Json.JsonConvert.SerializeObject(externalUser)}");
+            //Logger.Debug(Newtonsoft.Json.JsonConvert.SerializeObject(new UserLoginInfo(model.AuthProvider, externalUser.ProviderKey, model.AuthProvider) ) + GetTenancyNameOrNull());
+            var loginResult = await _logInManager.LoginAsync(new UserLoginInfo(model.AuthProvider, externalUser.ProviderKey, model.AuthProvider), GetTenancyNameOrNull());
+            //Logger.Debug(loginResult.Result.ToString());
+
+            switch (loginResult.Result)
+            {
+                case AbpLoginResultType.Success:
+                    {
+                        var accessToken = CreateAccessToken(CreateJwtClaims(loginResult.Identity));
+                        return new ExternalAuthenticateResultModel
+                        {
+                            AccessToken = accessToken,
+                            EncryptedAccessToken = GetEncryptedAccessToken(accessToken),
+                            ExpireInSeconds = (int)_configuration.Expiration.TotalSeconds
+        
+                        };
+                    }
+                case AbpLoginResultType.UnknownExternalLogin:
+                    {
+                        var newUser = await RegisterExternalUserAsync(externalUser);
+                        if (!newUser.IsActive)
+                        {
+                            return new ExternalAuthenticateResultModel
+                            {
+                                WaitingForActivation = true
+                            };
+                        }
+                        loginResult = await _logInManager.LoginAsync(new UserLoginInfo(model.AuthProvider, externalUser.ProviderKey, model.AuthProvider), GetTenancyNameOrNull());
+                        if (loginResult.Result != AbpLoginResultType.Success)
+                        {
+                            throw _abpLoginResultTypeHelper.CreateExceptionForFailedLoginAttempt(
+                                loginResult.Result,
+                                model.ProviderKey,
+                                GetTenancyNameOrNull()
+                            );
+                        }
+                        var accessToken = CreateAccessToken(CreateJwtClaims(loginResult.Identity));
+                        return new ExternalAuthenticateResultModel
+                        {
+                            AccessToken = accessToken,
+                            EncryptedAccessToken = GetEncryptedAccessToken(accessToken),
+                            ExpireInSeconds = (int)_configuration.Expiration.TotalSeconds
+                        };
+                    }
+                default:
+                    {
+                        throw _abpLoginResultTypeHelper.CreateExceptionForFailedLoginAttempt(
+                            loginResult.Result,
+                            model.ProviderKey,
+                            GetTenancyNameOrNull()
+                        );
+                    }
+            }
+
+        }
+
         [HttpGet]
         public List<ExternalLoginProviderInfoModel> GetExternalAuthenticationProviders()
         {
@@ -162,11 +228,13 @@ namespace LinXiDecorate.Controllers
         private async Task<ExternalAuthUserInfo> GetExternalUserInfo(ExternalAuthenticateModel model)
         {
             var userInfo = await _externalAuthManager.GetUserInfo(model.AuthProvider, model.ProviderAccessCode);
-            if (userInfo.ProviderKey != model.ProviderKey)
-            {
-                throw new UserFriendlyException(L("CouldNotValidateExternalUser"));
-            }
-
+            // Del by liumingyuan 2019-12-11 begin
+            //因为默认的ProviderKey要求同一个登陆器下的同一用唯一，但是微信小程序里只有OpenId能做到用户唯一，OpenId又不能放到网络里传输，因此就需要修改一下默认的方式
+            //if (userInfo.ProviderKey != model.ProviderKey)
+            //{
+            //    throw new UserFriendlyException(L("CouldNotValidateExternalUser"));
+            //}
+            // Del by liumingyuan 2019-12-11 end
             return userInfo;
         }
 

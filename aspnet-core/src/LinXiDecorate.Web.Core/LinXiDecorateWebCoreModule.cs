@@ -12,6 +12,7 @@ using Abp.Zero.Configuration;
 using LinXiDecorate.Authentication.JwtBearer;
 using LinXiDecorate.Configuration;
 using LinXiDecorate.EntityFrameworkCore;
+using LinXiDecorate.Authentication.External;
 
 namespace LinXiDecorate
 {
@@ -47,6 +48,26 @@ namespace LinXiDecorate
                  );
 
             ConfigureTokenAuth();
+
+            ConfigureExternalAuthProviders();
+        }
+
+        public void ConfigureExternalAuthProviders()
+        {
+            IocManager.Register<ExternalLoginProviderInfo>();
+            IocManager.Register<IExternalAuthConfiguration, ExternalAuthConfiguration>();
+            var externalAuthConfiguration = IocManager.Resolve<ExternalAuthConfiguration>();
+            if (bool.Parse(_appConfiguration["Authentication:WeChatMiniProgram:IsEnabled"]))
+            {
+                externalAuthConfiguration.Providers.Add(
+                    new ExternalLoginProviderInfo(
+                       WechatMiniProgramAuthProviderApi.ProviderName,
+                       _appConfiguration["Authentication:WeChatMiniProgram:AppId"],
+                       _appConfiguration["Authentication:WeChatMiniProgram:Secret"],
+                       typeof(WechatMiniProgramAuthProviderApi)
+                    )
+                );
+            }
         }
 
         private void ConfigureTokenAuth()
